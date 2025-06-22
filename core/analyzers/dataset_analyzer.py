@@ -149,7 +149,7 @@ class DatasetAnalyzer:
         )
     
     def _detect_data_type(self, series: pd.Series) -> DataType:
-        \"\"\"Intelligently detect the data type of a column\"\"\"
+        """Intelligently detect the data type of a column"""
         # Remove null values for analysis
         non_null_series = series.dropna()
         
