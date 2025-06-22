@@ -30,6 +30,30 @@ NoCodeML/
 
 ## Getting Started
 
+### 🚀 Quick Start (User-Friendly Web Interface)
+
+**For Non-Technical Users:**
+```bash
+# 1. Set up the environment (one-time setup)
+./setup_ui.sh
+
+# 2. Start the web interface
+./start_ui.sh
+```
+
+The web interface will open automatically at `http://localhost:8501`
+
+**Alternative Method:**
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Start the UI directly
+python run_ui.py
+```
+
+### 🔧 Developer Setup (API Backend)
+
 ```bash
 # Clone the repository
 git clone https://github.com/yourusername/NoCodeML.git
@@ -42,8 +66,8 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Run the application
-python -m uvicorn backend.main:app --reload
+# Run the backend API
+python minimal_server.py
 ```
 
 ## Development Status

@@ -1,0 +1,21 @@
+Customer_ID,Name,Age,Email,Purchase_Amount,Category,Satisfaction
+CUST_0001,John Smith,25.0,john@email.com,100.0,Electronics,4
+CUST_0002,Jane Doe,35.0,jane@email.com,250.0,Clothing,5
+CUST_0003,,28.0,invalid-email,300.0,Electronics,3
+CUST_0004,Bob Wilson,,bob@email.com,150.0,Books,4
+CUST_0005,Alice Johnson,42.0,,,Electronics,5
+CUST_0006,Charlie Brown,31.0,charlie@email.com,200.0,Clothing,3
+CUST_0007,,29.0,diana@,175.0,Electronics,4
+CUST_0008,Diana Prince,38.0,diana@email.com,400.0,Books,5
+CUST_0009,Frank Castle,,frank@email.com,225.0,Clothing,4
+CUST_0010,Grace Kelly,33.0,,300.0,Electronics,3
+CUST_0011,Henry Ford,45.0,henry@email.com,500.0,Books,5
+CUST_0012,Isabel Archer,27.0,isabel@email.com,,Clothing,4
+CUST_0013,Jack Ryan,39.0,jack@email.com,350.0,Electronics,3
+CUST_0014,,31.0,karen@email.com,275.0,Books,4
+CUST_0015,Leo Tolstoy,44.0,leo@email.com,450.0,Electronics,5
+CUST_0016,Mia Wallace,26.0,mia@email.com,125.0,Clothing,3
+CUST_0017,Noah Webster,37.0,,375.0,Books,4
+CUST_0018,Olivia Pope,32.0,olivia@email.com,325.0,Electronics,5
+CUST_0019,Paul McCartney,41.0,paul@email.com,,Clothing,4
+CUST_0020,Quinn Fabray,29.0,quinn@email.com,180.0,Books,3

@@ -23,17 +23,17 @@ optuna>=3.5.0
 # hyperopt==0.2.7  # Has compatibility issues
 
 # Data Processing & Visualization
-matplotlib==3.8.2
+matplotlib>=3.9.0
 seaborn==0.13.0
 plotly==5.17.0
-pillow==10.1.0
+pillow>=10.1.0
 
 # Model Explainability
 shap==0.44.0
 lime==0.2.0.1
 
 # Utilities
-pydantic==2.5.2
+pydantic>=2.6.0
 python-dotenv==1.0.0
 loguru==0.7.2
 tqdm==4.66.1
@@ -52,4 +52,9 @@ mypy==1.7.1
 # Jupyter for notebooks
 jupyter==1.0.0
 ipykernel==6.27.1
+
+# Streamlit UI Framework
+streamlit>=1.28.0
+streamlit-option-menu>=0.3.6
+altair>=5.1.0
 
