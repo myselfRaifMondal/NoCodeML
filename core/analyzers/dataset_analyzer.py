@@ -185,7 +185,7 @@ class DatasetAnalyzer:
         return DataType.CATEGORICAL
     
     def _is_datetime_column(self, series: pd.Series) -> bool:
-        \"\"\"Check if a column contains datetime data\"\"\"
+        """Check if a column contains datetime data"""
         try:
             # Try to parse a sample of the data
             sample = series.head(min(100, len(series)))
@@ -194,9 +194,9 @@ class DatasetAnalyzer:
         except:
             # Try common date patterns
             date_patterns = [
-                r'\\d{4}-\\d{2}-\\d{2}',  # YYYY-MM-DD
-                r'\\d{2}/\\d{2}/\\d{4}',  # MM/DD/YYYY
-                r'\\d{2}-\\d{2}-\\d{4}',  # MM-DD-YYYY
+                r'\d{4}-\d{2}-\d{2}',  # YYYY-MM-DD
+                r'\d{2}/\d{2}/\d{4}',  # MM/DD/YYYY
+                r'\d{2}-\d{2}-\d{4}',  # MM-DD-YYYY
             ]
             
             sample_str = series.astype(str).head(10)
@@ -207,7 +207,7 @@ class DatasetAnalyzer:
             return False
     
     def _calculate_column_statistics(self, series: pd.Series, data_type: DataType) -> Dict[str, Any]:
-        \"\"\"Calculate type-specific statistics for a column\"\"\"
+        """Calculate type-specific statistics for a column"""
         stats = {}
         non_null_series = series.dropna()
         
@@ -238,13 +238,13 @@ class DatasetAnalyzer:
                 'min_length': int(text_lengths.min()) if len(text_lengths) > 0 else None,
                 'max_length': int(text_lengths.max()) if len(text_lengths) > 0 else None,
                 'contains_urls': bool(non_null_series.astype(str).str.contains(r'http[s]?://').any()),
-                'contains_emails': bool(non_null_series.astype(str).str.contains(r'\\S+@\\S+').any())
+                'contains_emails': bool(non_null_series.astype(str).str.contains(r'\S+@\S+').any())
             })
         
         return stats
     
     def _calculate_quality_score(self, df: pd.DataFrame) -> float:
-        \"\"\"Calculate overall data quality score (0-100)\"\"\"
+        """Calculate overall data quality score (0-100)"""
         scores = []
         
         # Completeness score (based on missing values)
@@ -277,7 +277,7 @@ class DatasetAnalyzer:
         return round(np.mean(scores), 1)
     
     def _recommend_problem_types(self, df: pd.DataFrame, column_info: List[ColumnInfo]) -> List[ProblemType]:
-        \"\"\"Recommend suitable ML problem types based on dataset characteristics\"\"\"
+        """Recommend suitable ML problem types based on dataset characteristics"""
         recommendations = []
         
         # Count column types
@@ -320,18 +320,18 @@ class DatasetAnalyzer:
         return list(set(recommendations)) if recommendations else [ProblemType.CLASSIFICATION]
     
     def _generate_suggestions(self, df: pd.DataFrame, column_info: List[ColumnInfo]) -> List[str]:
-        \"\"\"Generate actionable suggestions for the dataset\"\"\"
+        """Generate actionable suggestions for the dataset"""
         suggestions = []
         
         # Data size suggestions
         if len(df) < self.min_samples_for_ml:
-            suggestions.append(f\"Consider collecting more data. Current size ({len(df)} rows) may be insufficient for robust ML models. Aim for at least {self.min_samples_for_ml} samples.\")
+            suggestions.append(f"Consider collecting more data. Current size ({len(df)} rows) may be insufficient for robust ML models. Aim for at least {self.min_samples_for_ml} samples.")
         
         # Missing data suggestions
         high_missing_cols = [col for col in column_info if col.missing_percentage > 30]
         if high_missing_cols:
             col_names = [col.name for col in high_missing_cols]
-            suggestions.append(f\"Columns with high missing values detected: {', '.join(col_names)}. Consider imputation or removal.\")
+            suggestions.append(f"Columns with high missing values detected: {', '.join(col_names)}. Consider imputation or removal.")
         
         # High cardinality suggestions
         high_card_cols = [col for col in column_info 
@@ -339,49 +339,49 @@ class DatasetAnalyzer:
                          col.unique_count / len(df) > self.high_cardinality_threshold]
         if high_card_cols:
             col_names = [col.name for col in high_card_cols]
-            suggestions.append(f\"High cardinality categorical columns detected: {', '.join(col_names)}. Consider feature engineering or encoding strategies.\")
+            suggestions.append(f"High cardinality categorical columns detected: {', '.join(col_names)}. Consider feature engineering or encoding strategies.")
         
         # Target column suggestions
         binary_cols = [col for col in column_info if col.data_type == DataType.BINARY]
         if binary_cols:
-            suggestions.append(f\"Potential target columns for classification: {', '.join([col.name for col in binary_cols])}\")
+            suggestions.append(f"Potential target columns for classification: {', '.join([col.name for col in binary_cols])}")
         
         # Feature engineering suggestions
         text_cols = [col for col in column_info if col.data_type == DataType.TEXT]
         if text_cols:
-            suggestions.append(\"Text columns detected. Consider NLP techniques like TF-IDF, word embeddings, or sentiment analysis.\")
+            suggestions.append("Text columns detected. Consider NLP techniques like TF-IDF, word embeddings, or sentiment analysis.")
         
         datetime_cols = [col for col in column_info if col.data_type == DataType.DATETIME]
         if datetime_cols:
-            suggestions.append(\"Datetime columns detected. Consider extracting features like year, month, day, hour, or day of week.\")
+            suggestions.append("Datetime columns detected. Consider extracting features like year, month, day, hour, or day of week.")
         
         return suggestions
     
     def _generate_warnings(self, df: pd.DataFrame, column_info: List[ColumnInfo]) -> List[str]:
-        \"\"\"Generate warnings about potential data issues\"\"\"
+        """Generate warnings about potential data issues"""
         warnings = []
         
         # Duplicate rows warning
         duplicate_count = df.duplicated().sum()
         if duplicate_count > 0:
-            warnings.append(f\"{duplicate_count} duplicate rows detected. This may affect model performance.\")
+            warnings.append(f"{duplicate_count} duplicate rows detected. This may affect model performance.")
         
         # Extremely high missing values
         critical_missing_cols = [col for col in column_info if col.missing_percentage > 70]
         if critical_missing_cols:
             col_names = [col.name for col in critical_missing_cols]
-            warnings.append(f\"Columns with critical missing values (>70%): {', '.join(col_names)}. Consider removing these columns.\")
+            warnings.append(f"Columns with critical missing values (>70%): {', '.join(col_names)}. Consider removing these columns.")
         
         # Single value columns
         single_value_cols = [col for col in column_info if col.unique_count <= 1]
         if single_value_cols:
             col_names = [col.name for col in single_value_cols]
-            warnings.append(f\"Columns with single unique value detected: {', '.join(col_names)}. These provide no predictive value.\")
+            warnings.append(f"Columns with single unique value detected: {', '.join(col_names)}. These provide no predictive value.")
         
         # Memory usage warning
         memory_usage_mb = df.memory_usage(deep=True).sum() / (1024 * 1024)
         if memory_usage_mb > 500:  # 500MB threshold
-            warnings.append(f\"Large dataset detected ({memory_usage_mb:.1f}MB). Consider data sampling or optimization for faster processing.\")
+            warnings.append(f"Large dataset detected ({memory_usage_mb:.1f}MB). Consider data sampling or optimization for faster processing.")
         
         # Imbalanced data warning for potential classification
         binary_cols = [col for col in column_info if col.data_type == DataType.BINARY]
@@ -391,7 +391,53 @@ class DatasetAnalyzer:
                 if len(values) >= 2:
                     ratio = min(values) / max(values)
                     if ratio < 0.1:  # 10:1 ratio threshold
-                        warnings.append(f\"Severe class imbalance detected in '{col.name}'. Consider balancing techniques.\")
+                        warnings.append(f"Severe class imbalance detected in '{col.name}'. Consider balancing techniques.")
         
         return warnings
-
+    
+    def analyze_dataframe(self, df: pd.DataFrame, filename: str = "dataframe") -> DatasetInfo:
+        """
+        Perform comprehensive dataset analysis on an existing DataFrame
+        
+        Args:
+            df: Pandas DataFrame to analyze
+            filename: Optional filename for identification
+            
+        Returns:
+            DatasetInfo: Complete analysis results
+        """
+        try:
+            # Basic information
+            size_mb = df.memory_usage(deep=True).sum() / (1024 * 1024)
+            
+            # Analyze columns
+            column_info = []
+            for col in df.columns:
+                col_info = self._analyze_column(df, col)
+                column_info.append(col_info)
+            
+            # Calculate data quality score
+            quality_score = self._calculate_quality_score(df)
+            
+            # Recommend problem types
+            recommended_types = self._recommend_problem_types(df, column_info)
+            
+            # Generate suggestions and warnings
+            suggestions = self._generate_suggestions(df, column_info)
+            warnings = self._generate_warnings(df, column_info)
+            
+            return DatasetInfo(
+                filename=filename,
+                size_mb=round(size_mb, 2),
+                rows=len(df),
+                columns=len(df.columns),
+                column_info=column_info,
+                data_quality_score=quality_score,
+                recommended_problem_types=recommended_types,
+                suggestions=suggestions,
+                warnings=warnings,
+                upload_timestamp=datetime.now()
+            )
+            
+        except Exception as e:
+            raise Exception(f"Error analyzing dataframe: {str(e)}")

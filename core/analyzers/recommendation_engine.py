@@ -238,5 +238,260 @@ class RecommendationEngine:
         }
         
         # Check for high cardinality categorical variables
-        for col in df.select_dtypes(include=['object']).columns:\n            if df[col].nunique() > len(df) * 0.5:\n                characteristics['has_high_cardinality'] = True\n                break\n        \n        return characteristics\n    \n    def _calculate_algorithm_score(self, data_characteristics: Dict, profile: Dict) -> float:\n        \"\"\"Calculate confidence score for an algorithm based on data characteristics\"\"\"\n        base_score = profile['confidence_base']\n        score = base_score\n        \n        # Data size considerations\n        n_samples = data_characteristics['n_samples']\n        if n_samples < profile['data_size_min']:\n            score *= 0.7  # Penalize if below minimum\n        elif n_samples >= profile['data_size_optimal']:\n            score *= 1.1  # Boost if optimal size\n        \n        # Missing value handling\n        if data_characteristics['has_missing_values'] and not profile['handles_missing']:\n            score *= 0.8\n        \n        # Categorical data handling\n        if data_characteristics['has_categorical'] and not profile['handles_categorical']:\n            score *= 0.85\n        \n        # Data quality considerations\n        score *= data_characteristics['data_quality_score']\n        \n        # High cardinality penalty for some algorithms\n        if data_characteristics['has_high_cardinality'] and profile.get('sensitive_to_cardinality', False):\n            score *= 0.9\n        \n        return min(1.0, max(0.1, score))  # Clamp between 0.1 and 1.0\n    \n    def _generate_hyperparameters(self, algorithm_name: str, data_characteristics: Dict) -> Dict[str, Any]:\n        \"\"\"Generate optimized hyperparameters based on data characteristics\"\"\"\n        n_samples = data_characteristics['n_samples']\n        n_features = data_characteristics['n_features']\n        \n        if algorithm_name == 'RandomForest':\n            n_estimators = min(200, max(50, n_samples // 10))\n            max_depth = min(20, max(5, int(np.log2(n_features)) + 3))\n            return {\n                'n_estimators': n_estimators,\n                'max_depth': max_depth,\n                'min_samples_split': 5 if n_samples > 1000 else 2,\n                'min_samples_leaf': 2 if n_samples > 1000 else 1\n            }\n        \n        elif algorithm_name == 'XGBoost':\n            return {\n                'n_estimators': min(200, max(50, n_samples // 20)),\n                'learning_rate': 0.1 if n_samples > 1000 else 0.2,\n                'max_depth': min(8, max(3, int(np.log2(n_features)))),\n                'subsample': 0.9 if n_samples > 1000 else 1.0\n            }\n        \n        elif algorithm_name == 'LogisticRegression':\n            return {\n                'C': 1.0 if n_samples > 1000 else 10.0,\n                'solver': 'lbfgs' if n_features < 100 else 'liblinear',\n                'max_iter': 1000\n            }\n        \n        elif algorithm_name == 'SVM':\n            return {\n                'C': 1.0,\n                'kernel': 'rbf' if n_features < 100 else 'linear',\n                'gamma': 'scale'\n            }\n        \n        return {}\n    \n    def _generate_preprocessing_steps(self, algorithm_name: str, data_characteristics: Dict, \n                                    profile: Dict) -> List[str]:\n        \"\"\"Generate required preprocessing steps\"\"\"\n        steps = []\n        \n        # Missing value handling\n        if data_characteristics['has_missing_values']:\n            if not profile['handles_missing']:\n                steps.append('Handle Missing Values')\n        \n        # Categorical encoding\n        if data_characteristics['has_categorical']:\n            if not profile['handles_categorical']:\n                if data_characteristics['has_high_cardinality']:\n                    steps.append('Target Encoding')\n                else:\n                    steps.append('One-Hot Encoding')\n        \n        # Scaling for algorithms that need it\n        if algorithm_name in ['LogisticRegression', 'SVM', 'NeuralNetwork']:\n            steps.append('Feature Scaling')\n        \n        # Feature selection for high-dimensional data\n        if data_characteristics['n_features'] > 100:\n            steps.append('Feature Selection')\n        \n        # Outlier detection for sensitive algorithms\n        if algorithm_name in ['LogisticRegression', 'SVM'] and data_characteristics['n_samples'] > 1000:\n            steps.append('Outlier Detection')\n        \n        return steps\n    \n    def _estimate_performance(self, algorithm_name: str, data_characteristics: Dict, \n                            problem_type: str) -> Dict[str, float]:\n        \"\"\"Estimate expected model performance\"\"\"\n        base_performance = {\n            'classification': {\n                'RandomForest': {'accuracy': 0.85, 'f1_score': 0.83},\n                'XGBoost': {'accuracy': 0.87, 'f1_score': 0.85},\n                'LogisticRegression': {'accuracy': 0.78, 'f1_score': 0.76},\n                'SVM': {'accuracy': 0.82, 'f1_score': 0.80}\n            },\n            'regression': {\n                'RandomForest': {'r2_score': 0.82, 'rmse': 0.25},\n                'XGBoost': {'r2_score': 0.85, 'rmse': 0.22},\n                'LinearRegression': {'r2_score': 0.75, 'rmse': 0.30},\n                'Ridge': {'r2_score': 0.77, 'rmse': 0.28}\n            }\n        }\n        \n        if problem_type in base_performance and algorithm_name in base_performance[problem_type]:\n            performance = base_performance[problem_type][algorithm_name].copy()\n            \n            # Adjust based on data quality\n            quality_factor = data_characteristics['data_quality_score']\n            for metric in performance:\n                performance[metric] *= quality_factor\n            \n            return performance\n        \n        return {}\n    \n    def _generate_explanation(self, algorithm_name: str, data_characteristics: Dict, \n                            profile: Dict) -> str:\n        \"\"\"Generate human-readable explanation for algorithm choice\"\"\"\n        explanations = {\n            'RandomForest': f\"Random Forest is recommended because it handles mixed data types well, requires minimal preprocessing, and provides good interpretability. With {data_characteristics['n_samples']} samples, it should perform robustly.\",\n            \n            'XGBoost': f\"XGBoost is highly recommended for structured data with {data_characteristics['n_samples']} samples. It often provides state-of-the-art performance and handles missing values automatically.\",\n            \n            'LogisticRegression': f\"Logistic Regression is suggested for its simplicity and interpretability. It works well when relationships are approximately linear and provides fast training.\",\n            \n            'SVM': f\"Support Vector Machine is recommended for this dataset size ({data_characteristics['n_samples']} samples). It can capture non-linear relationships and works well in high-dimensional spaces.\",\n            \n            'LinearRegression': \"Linear Regression is chosen for its simplicity and interpretability. It works best when the relationship between features and target is approximately linear.\",\n            \n            'Ridge': \"Ridge Regression is recommended to handle potential multicollinearity in your features while maintaining interpretability.\"\n        }\n        \n        base_explanation = explanations.get(algorithm_name, f\"{algorithm_name} is recommended based on your data characteristics.\")\n        \n        # Add data-specific insights\n        if data_characteristics['has_missing_values']:\n            if profile['handles_missing']:\n                base_explanation += \" It naturally handles missing values in your dataset.\"\n            else:\n                base_explanation += \" Note: Missing values will need to be handled during preprocessing.\"\n        \n        if data_characteristics['has_categorical']:\n            if profile['handles_categorical']:\n                base_explanation += \" It can work directly with categorical features.\"\n            else:\n                base_explanation += \" Categorical features will be encoded during preprocessing.\"\n        \n        return base_explanation\n    \n    def _get_algorithm_type(self, algorithm_name: str) -> str:\n        \"\"\"Determine the algorithm category\"\"\"\n        algorithm_types = {\n            'RandomForest': 'ensemble',\n            'XGBoost': 'ensemble',\n            'LogisticRegression': 'classical_ml',\n            'LinearRegression': 'classical_ml',\n            'Ridge': 'classical_ml',\n            'SVM': 'classical_ml',\n            'NeuralNetwork': 'deep_learning'\n        }\n        \n        return algorithm_types.get(algorithm_name, 'classical_ml')\n    \n    def _suggest_feature_columns(self, df: pd.DataFrame, target_column: Optional[str]) -> List[str]:\n        \"\"\"Suggest feature columns if not provided\"\"\"\n        all_columns = df.columns.tolist()\n        \n        if target_column and target_column in all_columns:\n            feature_columns = [col for col in all_columns if col != target_column]\n        else:\n            feature_columns = all_columns\n        \n        # Remove columns that are likely not useful as features\n        excluded_patterns = ['id', 'index', 'key', 'name', 'description']\n        feature_columns = [\n            col for col in feature_columns \n            if not any(pattern in col.lower() for pattern in excluded_patterns)\n        ]\n        \n        return feature_columns\n    \n    def _analyze_preprocessing_needs(self, df: pd.DataFrame, dataset_info) -> bool:\n        \"\"\"Determine if preprocessing is required\"\"\"\n        # Check for missing values\n        if df.isnull().any().any():\n            return True\n        \n        # Check for categorical variables\n        if len(df.select_dtypes(include=['object']).columns) > 0:\n            return True\n        \n        # Check for scale differences in numeric columns\n        numeric_cols = df.select_dtypes(include=[np.number]).columns\n        if len(numeric_cols) > 1:\n            ranges = []\n            for col in numeric_cols:\n                col_range = df[col].max() - df[col].min()\n                if not np.isnan(col_range) and col_range > 0:\n                    ranges.append(col_range)\n            \n            if len(ranges) > 1 and max(ranges) / min(ranges) > 100:\n                return True\n        \n        return False\n    \n    def _estimate_training_time(self, df: pd.DataFrame, recommendations: List[ModelRecommendation]) -> int:\n        \"\"\"Estimate training time in minutes\"\"\"\n        n_samples = len(df)\n        n_features = len(df.columns)\n        \n        # Base time calculation\n        base_time = (n_samples * n_features) / 10000  # minutes\n        \n        # Adjust for algorithm complexity\n        if recommendations:\n            primary_algorithm = recommendations[0].algorithm\n            complexity_multipliers = {\n                'LinearRegression': 0.5,\n                'LogisticRegression': 0.7,\n                'RandomForest': 1.0,\n                'XGBoost': 1.5,\n                'SVM': 2.0,\n                'NeuralNetwork': 3.0\n            }\n            multiplier = complexity_multipliers.get(primary_algorithm, 1.0)\n            base_time *= multiplier\n        \n        # Add preprocessing time\n        base_time += 2  # 2 minutes for preprocessing\n        \n        # Add hyperparameter optimization time\n        base_time += 3  # 3 minutes for hyperparameter tuning\n        \n        return max(1, int(base_time))  # Minimum 1 minute
+        for col in df.select_dtypes(include=['object']).columns:
+            if df[col].nunique() > len(df) * 0.5:
+                characteristics['has_high_cardinality'] = True
+                break
+        
+        return characteristics
+    
+    def _calculate_algorithm_score(self, data_characteristics: Dict, profile: Dict) -> float:
+        """Calculate confidence score for an algorithm based on data characteristics"""
+        base_score = profile['confidence_base']
+        score = base_score
+        
+        # Data size considerations
+        n_samples = data_characteristics['n_samples']
+        if n_samples < profile['data_size_min']:
+            score *= 0.7  # Penalize if below minimum
+        elif n_samples >= profile['data_size_optimal']:
+            score *= 1.1  # Boost if optimal size
+        
+        # Missing value handling
+        if data_characteristics['has_missing_values'] and not profile['handles_missing']:
+            score *= 0.8
+        
+        # Categorical data handling
+        if data_characteristics['has_categorical'] and not profile['handles_categorical']:
+            score *= 0.85
+        
+        # Data quality considerations
+        score *= data_characteristics['data_quality_score']
+        
+        # High cardinality penalty for some algorithms
+        if data_characteristics['has_high_cardinality'] and profile.get('sensitive_to_cardinality', False):
+            score *= 0.9
+        
+        return min(1.0, max(0.1, score))  # Clamp between 0.1 and 1.0
+    
+    def _generate_hyperparameters(self, algorithm_name: str, data_characteristics: Dict) -> Dict[str, Any]:
+        """Generate optimized hyperparameters based on data characteristics"""
+        n_samples = data_characteristics['n_samples']
+        n_features = data_characteristics['n_features']
+        
+        if algorithm_name == 'RandomForest':
+            n_estimators = min(200, max(50, n_samples // 10))
+            max_depth = min(20, max(5, int(np.log2(n_features)) + 3))
+            return {
+                'n_estimators': n_estimators,
+                'max_depth': max_depth,
+                'min_samples_split': 5 if n_samples > 1000 else 2,
+                'min_samples_leaf': 2 if n_samples > 1000 else 1
+            }
+        
+        elif algorithm_name == 'XGBoost':
+            return {
+                'n_estimators': min(200, max(50, n_samples // 20)),
+                'learning_rate': 0.1 if n_samples > 1000 else 0.2,
+                'max_depth': min(8, max(3, int(np.log2(n_features)))),
+                'subsample': 0.9 if n_samples > 1000 else 1.0
+            }
+        
+        elif algorithm_name == 'LogisticRegression':
+            return {
+                'C': 1.0 if n_samples > 1000 else 10.0,
+                'solver': 'lbfgs' if n_features < 100 else 'liblinear',
+                'max_iter': 1000
+            }
+        
+        elif algorithm_name == 'SVM':
+            return {
+                'C': 1.0,
+                'kernel': 'rbf' if n_features < 100 else 'linear',
+                'gamma': 'scale'
+            }
+        
+        return {}
+    
+    def _generate_preprocessing_steps(self, algorithm_name: str, data_characteristics: Dict, 
+                                    profile: Dict) -> List[str]:
+        """Generate required preprocessing steps"""
+        steps = []
+        
+        # Missing value handling
+        if data_characteristics['has_missing_values']:
+            if not profile['handles_missing']:
+                steps.append('Handle Missing Values')
+        
+        # Categorical encoding
+        if data_characteristics['has_categorical']:
+            if not profile['handles_categorical']:
+                if data_characteristics['has_high_cardinality']:
+                    steps.append('Target Encoding')
+                else:
+                    steps.append('One-Hot Encoding')
+        
+        # Scaling for algorithms that need it
+        if algorithm_name in ['LogisticRegression', 'SVM', 'NeuralNetwork']:
+            steps.append('Feature Scaling')
+        
+        # Feature selection for high-dimensional data
+        if data_characteristics['n_features'] > 100:
+            steps.append('Feature Selection')
+        
+        # Outlier detection for sensitive algorithms
+        if algorithm_name in ['LogisticRegression', 'SVM'] and data_characteristics['n_samples'] > 1000:
+            steps.append('Outlier Detection')
+        
+        return steps
+    
+    def _estimate_performance(self, algorithm_name: str, data_characteristics: Dict, 
+                            problem_type: str) -> Dict[str, float]:
+        """Estimate expected model performance"""
+        base_performance = {
+            'classification': {
+                'RandomForest': {'accuracy': 0.85, 'f1_score': 0.83},
+                'XGBoost': {'accuracy': 0.87, 'f1_score': 0.85},
+                'LogisticRegression': {'accuracy': 0.78, 'f1_score': 0.76},
+                'SVM': {'accuracy': 0.82, 'f1_score': 0.80}
+            },
+            'regression': {
+                'RandomForest': {'r2_score': 0.82, 'rmse': 0.25},
+                'XGBoost': {'r2_score': 0.85, 'rmse': 0.22},
+                'LinearRegression': {'r2_score': 0.75, 'rmse': 0.30},
+                'Ridge': {'r2_score': 0.77, 'rmse': 0.28}
+            }
+        }
+        
+        if problem_type in base_performance and algorithm_name in base_performance[problem_type]:
+            performance = base_performance[problem_type][algorithm_name].copy()
+            
+            # Adjust based on data quality
+            quality_factor = data_characteristics['data_quality_score']
+            for metric in performance:
+                performance[metric] *= quality_factor
+            
+            return performance
+        
+        return {}
+    
+    def _generate_explanation(self, algorithm_name: str, data_characteristics: Dict, 
+                            profile: Dict) -> str:
+        """Generate human-readable explanation for algorithm choice"""
+        explanations = {
+            'RandomForest': f"Random Forest is recommended because it handles mixed data types well, requires minimal preprocessing, and provides good interpretability. With {data_characteristics['n_samples']} samples, it should perform robustly.",
+            
+            'XGBoost': f"XGBoost is highly recommended for structured data with {data_characteristics['n_samples']} samples. It often provides state-of-the-art performance and handles missing values automatically.",
+            
+            'LogisticRegression': f"Logistic Regression is suggested for its simplicity and interpretability. It works well when relationships are approximately linear and provides fast training.",
+            
+            'SVM': f"Support Vector Machine is recommended for this dataset size ({data_characteristics['n_samples']} samples). It can capture non-linear relationships and works well in high-dimensional spaces.",
+            
+            'LinearRegression': "Linear Regression is chosen for its simplicity and interpretability. It works best when the relationship between features and target is approximately linear.",
+            
+            'Ridge': "Ridge Regression is recommended to handle potential multicollinearity in your features while maintaining interpretability."
+        }
+        
+        base_explanation = explanations.get(algorithm_name, f"{algorithm_name} is recommended based on your data characteristics.")
+        
+        # Add data-specific insights
+        if data_characteristics['has_missing_values']:
+            if profile['handles_missing']:
+                base_explanation += " It naturally handles missing values in your dataset."
+            else:
+                base_explanation += " Note: Missing values will need to be handled during preprocessing."
+        
+        if data_characteristics['has_categorical']:
+            if profile['handles_categorical']:
+                base_explanation += " It can work directly with categorical features."
+            else:
+                base_explanation += " Categorical features will be encoded during preprocessing."
+        
+        return base_explanation
+    
+    def _get_algorithm_type(self, algorithm_name: str) -> str:
+        """Determine the algorithm category"""
+        algorithm_types = {
+            'RandomForest': 'ensemble',
+            'XGBoost': 'ensemble',
+            'LogisticRegression': 'classical_ml',
+            'LinearRegression': 'classical_ml',
+            'Ridge': 'classical_ml',
+            'SVM': 'classical_ml',
+            'NeuralNetwork': 'deep_learning'
+        }
+        
+        return algorithm_types.get(algorithm_name, 'classical_ml')
+    
+    def _suggest_feature_columns(self, df: pd.DataFrame, target_column: Optional[str]) -> List[str]:
+        """Suggest feature columns if not provided"""
+        all_columns = df.columns.tolist()
+        
+        if target_column and target_column in all_columns:
+            feature_columns = [col for col in all_columns if col != target_column]
+        else:
+            feature_columns = all_columns
+        
+        # Remove columns that are likely not useful as features
+        excluded_patterns = ['id', 'index', 'key', 'name', 'description']
+        feature_columns = [
+            col for col in feature_columns 
+            if not any(pattern in col.lower() for pattern in excluded_patterns)
+        ]
+        
+        return feature_columns
+    
+    def _analyze_preprocessing_needs(self, df: pd.DataFrame, dataset_info) -> bool:
+        """Determine if preprocessing is required"""
+        # Check for missing values
+        if df.isnull().any().any():
+            return True
+        
+        # Check for categorical variables
+        if len(df.select_dtypes(include=['object']).columns) > 0:
+            return True
+        
+        # Check for scale differences in numeric columns
+        numeric_cols = df.select_dtypes(include=[np.number]).columns
+        if len(numeric_cols) > 1:
+            ranges = []
+            for col in numeric_cols:
+                col_range = df[col].max() - df[col].min()
+                if not np.isnan(col_range) and col_range > 0:
+                    ranges.append(col_range)
+            
+            if len(ranges) > 1 and max(ranges) / min(ranges) > 100:
+                return True
+        
+        return False
+    
+    def _estimate_training_time(self, df: pd.DataFrame, recommendations: List[ModelRecommendation]) -> int:
+        """Estimate training time in minutes"""
+        n_samples = len(df)
+        n_features = len(df.columns)
+        
+        # Base time calculation
+        base_time = (n_samples * n_features) / 10000  # minutes
+        
+        # Adjust for algorithm complexity
+        if recommendations:
+            primary_algorithm = recommendations[0].algorithm
+            complexity_multipliers = {
+                'LinearRegression': 0.5,
+                'LogisticRegression': 0.7,
+                'RandomForest': 1.0,
+                'XGBoost': 1.5,
+                'SVM': 2.0,
+                'NeuralNetwork': 3.0
+            }
+            multiplier = complexity_multipliers.get(primary_algorithm, 1.0)
+            base_time *= multiplier
+        
+        # Add preprocessing time
+        base_time += 2  # 2 minutes for preprocessing
+        
+        # Add hyperparameter optimization time
+        base_time += 3  # 3 minutes for hyperparameter tuning
+        
+        return max(1, int(base_time))  # Minimum 1 minute
 
