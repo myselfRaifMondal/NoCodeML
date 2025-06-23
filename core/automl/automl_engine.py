@@ -178,6 +178,9 @@ class AutoMLEngine:
                 df, config['target_column'], config['feature_columns']
             )
             
+            # Emergency NaN check and fix before training
+            X, y = self._emergency_nan_cleanup(X, y)
+            
             if progress_callback:
                 await progress_callback("Splitting data", 20)
             
@@ -404,6 +407,63 @@ class AutoMLEngine:
             print(f"Could not extract feature importance: {e}")
         
         return importance_dict
+    
+    def _emergency_nan_cleanup(self, X: pd.DataFrame, y: pd.Series) -> Tuple[pd.DataFrame, pd.Series]:
+        """Emergency cleanup of NaN values before model training"""
+        print("🚨 Performing emergency NaN cleanup before model training...")
+        
+        # Check for NaN in target
+        if y.isnull().any():
+            nan_count = y.isnull().sum()
+            print(f"❌ Found {nan_count} NaN values in target variable - removing rows")
+            valid_indices = ~y.isnull()
+            X = X[valid_indices]
+            y = y[valid_indices]
+        
+        # Check for NaN in features
+        if X.isnull().any().any():
+            print("❌ Found NaN values in features - applying emergency imputation")
+            
+            for col in X.columns:
+                if X[col].isnull().any():
+                    nan_count = X[col].isnull().sum()
+                    print(f"  - Column '{col}': {nan_count} NaN values")
+                    
+                    if X[col].dtype in ['int64', 'float64', 'float32', 'int32']:
+                        # Use median for numeric columns
+                        median_val = X[col].median()
+                        if pd.isna(median_val):
+                            # If median is also NaN, use 0
+                            X[col] = X[col].fillna(0)
+                            print(f"    → Filled with 0 (median was NaN)")
+                        else:
+                            X[col] = X[col].fillna(median_val)
+                            print(f"    → Filled with median: {median_val}")
+                    else:
+                        # Use most frequent for categorical columns
+                        mode_val = X[col].mode()
+                        if len(mode_val) > 0:
+                            X[col] = X[col].fillna(mode_val[0])
+                            print(f"    → Filled with mode: {mode_val[0]}")
+                        else:
+                            X[col] = X[col].fillna('Unknown')
+                            print(f"    → Filled with 'Unknown'")
+        
+        # Final verification
+        if X.isnull().any().any() or y.isnull().any():
+            print("⚠️  Still have NaN values after cleanup - dropping remaining NaN rows")
+            # Drop any remaining rows with NaN
+            complete_cases = ~(X.isnull().any(axis=1) | y.isnull())
+            X = X[complete_cases]
+            y = y[complete_cases]
+        
+        print(f"✅ NaN cleanup completed. Final dataset: {len(X)} rows, {X.shape[1]} columns")
+        
+        # Ensure we have enough data
+        if len(X) < 2:
+            raise ValueError("❌ Error building model: Not enough valid data after NaN cleanup. Please check your dataset for quality issues.")
+        
+        return X, y
     
     async def predict(self, model_id: str, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """Make predictions using a trained model"""

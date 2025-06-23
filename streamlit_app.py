@@ -99,6 +99,7 @@ class NoCodeMLInterface:
             "🏠 Home": "home",
             "📂 Data Upload": "upload",
             "📊 Data Analysis": "analysis",
+            "🧹 Data Preprocessing": "preprocessing",
             "🤖 Model Building": "modeling",
             "📈 Results & Export": "results",
             "❓ Help & Tutorials": "help"
@@ -186,7 +187,7 @@ class NoCodeMLInterface:
                 with col3:
                     st.metric("File Size", f"{uploaded_file.size / 1024:.1f} KB")
                 
-                if st.button("🚀 Analyze This Dataset", type="primary"):
+                if st.button("🚀 Analyze This Dataset", type="primary", key="analyze_dataset"):
                     self.process_uploaded_file(uploaded_file, df)
                     
             except Exception as e:
@@ -447,7 +448,7 @@ class NoCodeMLInterface:
             )
         
         # Model building
-        if st.button("🚀 Build Model", type="primary"):
+        if st.button("🚀 Build Model", type="primary", key="build_model"):
             self.build_model(df, target_column, selected_features, problem_type, test_size, auto_tune)
 
     def build_model(self, df, target_column, selected_features, problem_type, test_size, auto_tune):
@@ -608,7 +609,7 @@ class NoCodeMLInterface:
                 key=f"pred_{feature}"
             )
         
-        if st.button("🎯 Make Prediction"):
+        if st.button("🎯 Make Prediction", key="make_prediction"):
             self.make_prediction(prediction_input, results)
 
     def make_prediction(self, input_data, results):
@@ -646,6 +647,414 @@ class NoCodeMLInterface:
             
         except Exception as e:
             st.error(f"❌ Error making prediction: {str(e)}")
+
+    def render_preprocessing_page(self):
+        """Render the data preprocessing page with advanced cleaning features"""
+        st.markdown("## 🧹 Data Preprocessing & Cleaning")
+        
+        if not self.session_state.analysis_results:
+            st.warning("⚠️ No dataset analyzed yet. Please upload and analyze a dataset first.")
+            return
+        
+        analysis = self.session_state.analysis_results
+        df = analysis.get('dataframe')
+        
+        if df is None:
+            st.error("❌ Dataset not available for preprocessing.")
+            return
+        
+        # Import preprocessing module
+        try:
+            import sys
+            from pathlib import Path
+            project_root = Path(__file__).parent
+            sys.path.append(str(project_root))
+            from core.preprocessing.data_preprocessor import DataPreprocessor, PreprocessingResult
+            from backend.models.schemas import ProblemType
+        except ImportError:
+            st.error("❌ Preprocessing module not available. Please ensure all dependencies are installed.")
+            return
+        
+        # Initialize preprocessor
+        preprocessor = DataPreprocessor()
+        
+        st.markdown("### 🔍 Current Dataset Status")
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("📊 Rows", df.shape[0])
+        with col2:
+            st.metric("📋 Columns", df.shape[1])
+        with col3:
+            missing_pct = (df.isnull().sum().sum() / (df.shape[0] * df.shape[1])) * 100
+            st.metric("❓ Missing Data", f"{missing_pct:.1f}%")
+        with col4:
+            duplicates = df.duplicated().sum()
+            st.metric("🔄 Duplicates", duplicates)
+        
+        # Data Quality Assessment
+        st.markdown("### 🎯 Data Quality Assessment")
+        
+        with st.expander("🔍 Run Quality Assessment", expanded=True):
+            if st.button("🚀 Assess Data Quality", type="primary", key="assess_data_quality"):
+                with st.spinner("🔄 Assessing data quality..."):
+                    try:
+                        issues = preprocessor._assess_data_quality(df, None)
+                        self.session_state.data_issues = issues
+                        
+                        if issues:
+                            st.success(f"✅ Assessment complete! Found {len(issues)} issues to address.")
+                            
+                            # Group issues by severity
+                            severity_groups = {'critical': [], 'high': [], 'medium': [], 'low': []}
+                            for issue in issues:
+                                severity_groups[issue.severity].append(issue)
+                            
+                            # Display issues by severity
+                            for severity, color in [('critical', '🚨'), ('high', '⚠️'), ('medium', '💡'), ('low', 'ℹ️')]:
+                                if severity_groups[severity]:
+                                    st.markdown(f"#### {color} {severity.title()} Issues")
+                                    for issue in severity_groups[severity]:
+                                        if severity == 'critical':
+                                            st.error(f"**{issue.issue_type.title()}:** {issue.description}")
+                                        elif severity == 'high':
+                                            st.warning(f"**{issue.issue_type.title()}:** {issue.description}")
+                                        else:
+                                            st.info(f"**{issue.issue_type.title()}:** {issue.description}")
+                                        st.caption(f"💡 Solution: {issue.solution}")
+                        else:
+                            st.success("🎉 No data quality issues detected! Your dataset looks great.")
+                            
+                    except Exception as e:
+                        st.error(f"❌ Error during assessment: {str(e)}")
+        
+        # Enhanced Preprocessing Option
+        st.markdown("### 🚀 Enhanced Preprocessing")
+        
+        use_enhanced = st.checkbox(
+            "Use Enhanced Preprocessing with Iterative Improvement",
+            value=True,
+            help="Enable advanced preprocessing with machine learning feedback and iterative improvement"
+        )
+        
+        if use_enhanced:
+            try:
+                from ui.enhanced_preprocessing_ui import render_enhanced_preprocessing_page
+                render_enhanced_preprocessing_page()
+                return  # Exit early if enhanced preprocessing is used
+            except ImportError as e:
+                st.error(f"❌ Enhanced preprocessing import failed: {str(e)}")
+                st.info("🔧 Attempting to fix the issue...")
+                
+                # Try to install missing dependencies
+                with st.spinner("Installing missing dependencies..."):
+                    try:
+                        import subprocess
+                        import sys
+                        
+                        # Install missing sklearn experimental features
+                        result = subprocess.run(
+                            [sys.executable, "-m", "pip", "install", "--upgrade", "scikit-learn"],
+                            capture_output=True, text=True
+                        )
+                        
+                        if result.returncode == 0:
+                            st.success("✅ Dependencies updated successfully!")
+                            st.info("🔄 Please refresh the page to use enhanced preprocessing.")
+                        else:
+                            st.warning("⚠️ Could not update dependencies automatically.")
+                            
+                    except Exception as install_error:
+                        st.warning(f"⚠️ Auto-fix failed: {str(install_error)}")
+                
+                st.warning("⚠️ Enhanced preprocessing not available. Using advanced basic preprocessing with auto-correction.")
+        
+        # Advanced Basic Preprocessing Configuration
+        st.markdown("### ⚙️ Advanced Preprocessing Configuration")
+        st.info("💡 **Auto-Correction Enabled**: All issues will be automatically detected and fixed without user intervention.")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            target_column = st.selectbox(
+                "🎯 Select Target Column (optional):",
+                ["None"] + df.columns.tolist(),
+                help="Select the column you want to predict. This helps optimize preprocessing."
+            )
+            target_column = None if target_column == "None" else target_column
+            
+            problem_type = st.selectbox(
+                "📊 Problem Type:",
+                ["Auto-detect", "Classification", "Regression", "Clustering"],
+                help="Type of machine learning problem"
+            )
+        
+        with col2:
+            auto_fix = st.checkbox(
+                "🔧 Auto-fix Critical Issues",
+                value=True,
+                help="Automatically fix critical issues like removing columns with >70% missing values"
+            )
+            
+            iterative_improvement = st.checkbox(
+                "🔄 Enable Iterative Improvement",
+                value=True,
+                help="Run multiple preprocessing iterations until quality stabilizes"
+            )
+        
+        # Advanced Settings
+        with st.expander("🛠️ Advanced Preprocessing Settings"):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                missing_threshold = st.slider(
+                    "Missing Data Threshold (% to remove column):",
+                    min_value=30, max_value=90, value=70,
+                    help="Columns with more than this % of missing values will be removed"
+                )
+                
+                correlation_threshold = st.slider(
+                    "Correlation Threshold (remove highly correlated features):",
+                    min_value=0.8, max_value=0.99, value=0.95, step=0.01,
+                    help="Remove features that are highly correlated with others"
+                )
+            
+            with col2:
+                outlier_method = st.selectbox(
+                    "Outlier Handling Method:",
+                    ["IQR Method", "Z-Score", "Remove", "Cap", "Transform"],
+                    help="Method to handle outliers in numeric data"
+                )
+                
+                encoding_strategy = st.selectbox(
+                    "Categorical Encoding Strategy:",
+                    ["Auto (Smart)", "One-Hot", "Label", "Target", "Frequency"],
+                    help="How to encode categorical variables"
+                )
+        
+        # Preprocessing Execution
+        st.markdown("### 🚀 Execute Preprocessing")
+        
+        if st.button("🧹 Start Comprehensive Preprocessing", type="primary", key="start_preprocessing"):
+            # Update preprocessor settings
+            preprocessor.missing_threshold = missing_threshold / 100
+            preprocessor.correlation_threshold = correlation_threshold
+            
+            # Convert problem type
+            problem_type_map = {
+                "Classification": ProblemType.CLASSIFICATION,
+                "Regression": ProblemType.REGRESSION,
+                "Clustering": ProblemType.CLUSTERING
+            }
+            selected_problem_type = problem_type_map.get(problem_type, None)
+            
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            try:
+                if iterative_improvement:
+                    status_text.text("🔄 Running iterative preprocessing...")
+                    progress_bar.progress(20)
+                    
+                    processed_df, results_list = preprocessor.iterative_improvement(
+                        df, target_column, selected_problem_type, max_iterations=3
+                    )
+                    progress_bar.progress(80)
+                    
+                    # Generate comprehensive report
+                    report = preprocessor.generate_preprocessing_report(results_list)
+                    
+                else:
+                    status_text.text("🔄 Running single-pass preprocessing...")
+                    progress_bar.progress(30)
+                    
+                    processed_df, result = preprocessor.comprehensive_preprocessing(
+                        df, target_column, selected_problem_type, auto_fix
+                    )
+                    progress_bar.progress(70)
+                    
+                    report = preprocessor.generate_preprocessing_report([result])
+                
+                progress_bar.progress(100)
+                status_text.text("✅ Preprocessing completed!")
+                
+                # Store results
+                self.session_state.processed_df = processed_df
+                self.session_state.preprocessing_report = report
+                
+                # Display results
+                self.display_preprocessing_results(df, processed_df, report, key_suffix="_current")
+                
+            except Exception as e:
+                st.error(f"❌ Error during preprocessing: {str(e)}")
+                st.exception(e)
+        
+        # Display previous results if available
+        if hasattr(self.session_state, 'preprocessing_report'):
+            st.markdown("### 📊 Previous Preprocessing Results")
+            self.display_preprocessing_results(
+                df, 
+                self.session_state.processed_df, 
+                self.session_state.preprocessing_report,
+                key_suffix="_previous"
+            )
+    
+    def display_preprocessing_results(self, original_df, processed_df, report, key_suffix=""):
+        """Display comprehensive preprocessing results"""
+        st.markdown("### 🎉 Preprocessing Results")
+        
+        # Summary metrics
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric(
+                "📊 Shape Change", 
+                f"{processed_df.shape[0]}×{processed_df.shape[1]}",
+                delta=f"{processed_df.shape[0] - original_df.shape[0]}, {processed_df.shape[1] - original_df.shape[1]}"
+            )
+        
+        with col2:
+            original_missing = (original_df.isnull().sum().sum() / (original_df.shape[0] * original_df.shape[1])) * 100
+            processed_missing = (processed_df.isnull().sum().sum() / (processed_df.shape[0] * processed_df.shape[1])) * 100
+            st.metric(
+                "❓ Missing Data", 
+                f"{processed_missing:.1f}%",
+                delta=f"{processed_missing - original_missing:.1f}%"
+            )
+        
+        with col3:
+            st.metric(
+                "🔄 Iterations", 
+                report['summary']['iterations_performed']
+            )
+        
+        with col4:
+            st.metric(
+                "📈 Quality Improvement", 
+                f"{report['summary']['quality_improvement']:.1f}%"
+            )
+        
+        # Detailed results in tabs
+        tab1, tab2, tab3, tab4 = st.tabs(["🔍 Summary", "🔧 Transformations", "📊 Before/After", "💾 Export"])
+        
+        with tab1:
+            st.markdown("#### 📋 Processing Summary")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**Original Dataset:**")
+                st.write(f"• Rows: {report['summary']['original_shape'][0]:,}")
+                st.write(f"• Columns: {report['summary']['original_shape'][1]}")
+                
+                st.markdown("**Issues Found:**")
+                if report['issues_analysis']['issues_by_severity']:
+                    for severity, count in report['issues_analysis']['issues_by_severity'].items():
+                        emoji = {'critical': '🚨', 'high': '⚠️', 'medium': '💡', 'low': 'ℹ️'}[severity]
+                        st.write(f"• {emoji} {severity.title()}: {count}")
+                else:
+                    st.write("• No issues detected")
+            
+            with col2:
+                st.markdown("**Processed Dataset:**")
+                st.write(f"• Rows: {report['summary']['final_shape'][0]:,}")
+                st.write(f"• Columns: {report['summary']['final_shape'][1]}")
+                
+                st.markdown("**Transformations Applied:**")
+                st.write(f"• Total: {report['summary']['total_transformations']}")
+                st.write(f"• Auto-fixed issues: {report['issues_analysis']['auto_fixed_issues']}")
+            
+            if report.get('recommendations'):
+                st.markdown("#### 💡 Recommendations")
+                for rec in report['recommendations']:
+                    st.info(f"💡 {rec}")
+        
+        with tab2:
+            st.markdown("#### 🔧 Applied Transformations")
+            
+            if report['transformations']:
+                for i, transformation in enumerate(report['transformations'], 1):
+                    st.write(f"{i}. {transformation}")
+            else:
+                st.info("No transformations were applied.")
+            
+            if report.get('encoding_info'):
+                st.markdown("#### 🏷️ Encoding Information")
+                st.json(report['encoding_info'])
+            
+            if report.get('scaling_info'):
+                st.markdown("#### 📏 Scaling Information")
+                st.json(report['scaling_info'])
+        
+        with tab3:
+            st.markdown("#### 📊 Before vs After Comparison")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**Original Data (First 5 rows)**")
+                st.dataframe(original_df.head(), use_container_width=True)
+            
+            with col2:
+                st.markdown("**Processed Data (First 5 rows)**")
+                st.dataframe(processed_df.head(), use_container_width=True)
+            
+            # Data type comparison
+            st.markdown("#### 📋 Data Types Comparison")
+            
+            original_types = pd.DataFrame({
+                'Column': original_df.columns,
+                'Original Type': original_df.dtypes.astype(str),
+                'Original Nulls': original_df.isnull().sum().values
+            })
+            
+            if not processed_df.empty:
+                # Only include columns that exist in both dataframes
+                common_cols = list(set(original_df.columns) & set(processed_df.columns))
+                
+                processed_types = pd.DataFrame({
+                    'Column': common_cols,
+                    'Processed Type': processed_df[common_cols].dtypes.astype(str),
+                    'Processed Nulls': processed_df[common_cols].isnull().sum().values
+                })
+                
+                comparison = original_types.merge(processed_types, on='Column', how='outer')
+                st.dataframe(comparison, use_container_width=True)
+            
+        with tab4:
+            st.markdown("#### 💾 Export Processed Data")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.button("📥 Download Processed CSV", key=f"download_processed_csv{key_suffix}"):
+                    csv = processed_df.to_csv(index=False)
+                    st.download_button(
+                        label="💾 Download CSV",
+                        data=csv,
+                        file_name=f"processed_{analysis['filename'].replace('.', '_')}.csv",
+                        mime="text/csv",
+                        key=f"download_csv_button{key_suffix}"
+                    )
+            
+            with col2:
+                if st.button("📊 Use for Model Building", key=f"use_for_model_building{key_suffix}"):
+                    # Update the analysis results with processed data
+                    self.session_state.analysis_results['dataframe'] = processed_df
+                    self.session_state.analysis_results['preprocessed'] = True
+                    st.success("✅ Processed dataset is now ready for model building!")
+                    st.info("👉 Go to 'Model Building' to train your ML models.")
+            
+            # Export preprocessing report
+            st.markdown("#### 📄 Export Preprocessing Report")
+            if st.button("📋 Download Preprocessing Report", key=f"download_preprocessing_report{key_suffix}"):
+                report_json = json.dumps(report, indent=2, default=str)
+                st.download_button(
+                    label="💾 Download Report (JSON)",
+                    data=report_json,
+                    file_name=f"preprocessing_report_{analysis['filename'].replace('.', '_')}.json",
+                    mime="application/json"
+                )
 
     def render_help_page(self):
         """Render the help and tutorials page"""
@@ -743,6 +1152,8 @@ def main():
         interface.render_upload_page()
     elif selected_page == "analysis":
         interface.render_analysis_page()
+    elif selected_page == "preprocessing":
+        interface.render_preprocessing_page()
     elif selected_page == "modeling":
         interface.render_modeling_page()
     elif selected_page == "results":
