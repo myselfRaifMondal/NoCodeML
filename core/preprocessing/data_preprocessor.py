@@ -26,6 +26,14 @@ sys.path.append(str(project_root))
 
 from backend.models.schemas import DataType, ProblemType
 
+# Import comprehensive error handler
+sys.path.append(str(Path(__file__).parent.parent / 'utils'))
+try:
+    from comprehensive_error_handler import ComprehensiveErrorHandler
+except ImportError:
+    print("Warning: Could not import ComprehensiveErrorHandler")
+    ComprehensiveErrorHandler = None
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -67,6 +75,9 @@ class DataPreprocessor:
         self.variance_threshold = 0.01  # Remove low variance features
         self.outlier_threshold = 3.0  # Z-score threshold for outlier detection
         
+        # Initialize error handler if available
+        self.error_handler = ComprehensiveErrorHandler() if ComprehensiveErrorHandler else None
+        
     def comprehensive_preprocessing(self, df: pd.DataFrame, 
                                   target_column: Optional[str] = None,
                                   problem_type: Optional[ProblemType] = None,
@@ -97,8 +108,23 @@ class DataPreprocessor:
         # Phase 2: Critical Issue Resolution
         logger.info("Phase 2: Resolving critical issues...")
         if auto_fix:
-            processed_df, fixed_issues = self._fix_critical_issues(processed_df, issues)
-            result.issues_fixed.extend(fixed_issues)
+            # Use comprehensive error handler if available
+            if self.error_handler and target_column:
+                try:
+                    logger.info("Using comprehensive error handler for auto-fix...")
+                    processed_df, target_series = self.error_handler.auto_fix_dataset(
+                        processed_df, processed_df[target_column], problem_type
+                    )
+                    # Update the target column in the dataframe
+                    processed_df[target_column] = target_series
+                    result.transformations_applied.append("Applied comprehensive auto-fix")
+                except Exception as e:
+                    logger.warning(f"Comprehensive auto-fix failed: {e}. Using fallback fixes.")
+                    processed_df, fixed_issues = self._fix_critical_issues(processed_df, issues)
+                    result.issues_fixed.extend(fixed_issues)
+            else:
+                processed_df, fixed_issues = self._fix_critical_issues(processed_df, issues)
+                result.issues_fixed.extend(fixed_issues)
         
         # Phase 3: Missing Data Handling
         logger.info("Phase 3: Handling missing data...")

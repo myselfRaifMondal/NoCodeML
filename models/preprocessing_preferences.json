@@ -1,10 +1,10 @@
 {
   "adaptive_thresholds": {
-    "missing_threshold": 0.7756641079892581,
-    "correlation_threshold": 1.4737618051795902,
-    "variance_threshold": 0.015513282159785164,
-    "outlier_threshold": 4.653984647935549,
-    "cardinality_threshold": 0.7756641079892581
+    "missing_threshold": 0.8551696790581571,
+    "correlation_threshold": 1.6248223902104983,
+    "variance_threshold": 0.017103393581163143,
+    "outlier_threshold": 5.131018074348943,
+    "cardinality_threshold": 0.8551696790581571
   },
   "strategy_performance": {
     "imputation_strategies": {
@@ -18,24 +18,42 @@
         0.0
       ],
       "Iterative imputation for 'Age'": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "Unknown category imputation for 'Cabin'": [
+        0.0,
         0.0
       ]
     },
     "outlier_strategies": {},
     "encoding_strategies": {
       "Label encoded 'Name' (20 categories)": [
+        0.0,
+        0.0,
         0.0
       ],
       "Label encoded binary column 'Sex'": [
+        0.0,
+        0.0,
         0.0
       ],
       "Label encoded 'Ticket' (20 categories)": [
+        0.0,
+        0.0,
         0.0
       ],
       "One-hot encoded column 'Cabin' (5 categories)": [
         0.0
       ],
       "One-hot encoded column 'Embarked' (3 categories)": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "One-hot encoded column 'Cabin' (6 categories)": [
+        0.0,
         0.0
       ]
     },
@@ -61,5 +79,5 @@
       ]
     }
   },
-  "last_updated": "2025-06-22T22:35:34.095871"
+  "last_updated": "2025-06-23T11:27:18.501271"
 }

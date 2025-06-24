@@ -39,6 +39,10 @@ sys.path.append(str(project_root))
 
 from backend.models.schemas import ProblemType, ModelMetrics
 
+# Import comprehensive error handler
+sys.path.append(str(Path(__file__).parent.parent / 'utils'))
+from comprehensive_error_handler import ComprehensiveErrorHandler
+
 class AutoMLEngine:
     """
     Advanced AutoML Engine that automatically:
@@ -52,6 +56,7 @@ class AutoMLEngine:
     def __init__(self):
         self.models_dir = project_root / "models" / "trained"
         self.models_dir.mkdir(parents=True, exist_ok=True)
+        self.error_handler = ComprehensiveErrorHandler()
         
         # Define algorithm pools
         self.classification_algorithms = {
@@ -184,11 +189,34 @@ class AutoMLEngine:
             if progress_callback:
                 await progress_callback("Splitting data", 20)
             
-            # Split data
+            # Split data with robust handling
             test_size = config.get('test_size', 0.2)
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=test_size, random_state=42, stratify=y if config['problem_type'] == 'classification' else None
-            )
+            
+            try:
+                # Safe train-test split with stratification
+                if config['problem_type'] == 'classification':
+                    # Check if stratification is possible
+                    class_counts = pd.Series(y).value_counts()
+                    min_class_size = class_counts.min()
+                    
+                    if min_class_size >= 2 and len(class_counts) < len(y):
+                        X_train, X_test, y_train, y_test = train_test_split(
+                            X, y, test_size=test_size, random_state=42, stratify=y
+                        )
+                    else:
+                        print("⚠️ Cannot use stratified split due to class distribution. Using random split.")
+                        X_train, X_test, y_train, y_test = train_test_split(
+                            X, y, test_size=test_size, random_state=42
+                        )
+                else:
+                    X_train, X_test, y_train, y_test = train_test_split(
+                        X, y, test_size=test_size, random_state=42
+                    )
+            except Exception as e:
+                print(f"⚠️ Train-test split failed: {e}. Using simple split.")
+                split_idx = int(len(X) * (1 - test_size))
+                X_train, X_test = X[:split_idx], X[split_idx:]
+                y_train, y_test = y[:split_idx], y[split_idx:]
             
             if progress_callback:
                 await progress_callback("Training model", 40)
@@ -324,6 +352,25 @@ class AutoMLEngine:
             label_encoder = LabelEncoder()
             y = label_encoder.fit_transform(y)
         
+        # Apply comprehensive error handling and data fixes
+        try:
+            # Determine problem type for auto-fix
+            if isinstance(y, (pd.Series, np.ndarray)):
+                unique_ratio = len(np.unique(y)) / len(y) if len(y) > 0 else 0
+                problem_type = ProblemType.CLASSIFICATION if unique_ratio < 0.5 else ProblemType.REGRESSION
+            else:
+                problem_type = ProblemType.CLASSIFICATION
+            
+            X, y = self.error_handler.auto_fix_dataset(X, pd.Series(y) if not isinstance(y, pd.Series) else y, problem_type)
+            y = y.values if hasattr(y, 'values') else y
+            
+            print(f"✅ Dataset auto-fixed successfully. Shape: {X.shape}, Target unique values: {len(np.unique(y))}")
+            
+        except Exception as e:
+            print(f"⚠️ Warning: Error in comprehensive auto-fix: {e}. Applying emergency cleanup.")
+            X, y = self._emergency_nan_cleanup(X, pd.Series(y) if not isinstance(y, pd.Series) else y)
+            y = y.values if hasattr(y, 'values') else y
+        
         return X, y, preprocessor
     
     def _train_algorithm(self, algorithm_config: Dict, X_train: pd.DataFrame, 
@@ -335,8 +382,30 @@ class AutoMLEngine:
         if not param_grid:
             # No hyperparameters to optimize
             model = model_class(random_state=42)
-            model.fit(X_train, y_train)
-            cv_scores = cross_val_score(model, X_train, y_train, cv=5)
+            
+            try:
+                # Safe model fitting with error handling
+                model.fit(X_train, y_train)
+                # Safe cross-validation with error handling
+                cv_scores = self.error_handler.safe_cross_validation(
+                    model, pd.DataFrame(X_train) if not isinstance(X_train, pd.DataFrame) else X_train, 
+                    pd.Series(y_train) if not isinstance(y_train, pd.Series) else y_train, cv=5
+                )
+            except Exception as e:
+                print(f"⚠️ Error in model training: {e}. Applying fixes...")
+                # Fix data and retry
+                X_train_fixed, y_train_fixed = self.error_handler.auto_fix_dataset(
+                    pd.DataFrame(X_train) if not isinstance(X_train, pd.DataFrame) else X_train,
+                    pd.Series(y_train) if not isinstance(y_train, pd.Series) else y_train
+                )
+                X_train_fixed = X_train_fixed.values if hasattr(X_train_fixed, 'values') else X_train_fixed
+                y_train_fixed = y_train_fixed.values if hasattr(y_train_fixed, 'values') else y_train_fixed
+                
+                model.fit(X_train_fixed, y_train_fixed)
+                cv_scores = self.error_handler.safe_cross_validation(
+                    model, pd.DataFrame(X_train_fixed), pd.Series(y_train_fixed), cv=5
+                )
+            
             return model, {}, cv_scores
         
         # Hyperparameter optimization
@@ -347,18 +416,55 @@ class AutoMLEngine:
         else:
             scoring = 'adjusted_rand_score'
         
-        # Use RandomizedSearchCV for efficiency
-        search = RandomizedSearchCV(
-            model_class(random_state=42),
-            param_grid,
-            n_iter=20,
-            cv=5,
-            scoring=scoring,
-            random_state=42,
-            n_jobs=-1
-        )
-        
-        search.fit(X_train, y_train)
+        # Use RandomizedSearchCV for efficiency with comprehensive error handling
+        try:
+            # First, ensure data is clean for hyperparameter search
+            X_train_clean, y_train_clean = self.error_handler.auto_fix_dataset(
+                pd.DataFrame(X_train) if not isinstance(X_train, pd.DataFrame) else X_train,
+                pd.Series(y_train) if not isinstance(y_train, pd.Series) else y_train
+            )
+            X_train_clean = X_train_clean.values if hasattr(X_train_clean, 'values') else X_train_clean
+            y_train_clean = y_train_clean.values if hasattr(y_train_clean, 'values') else y_train_clean
+            
+            # Determine appropriate CV strategy
+            if problem_type == 'classification':
+                class_counts = pd.Series(y_train_clean).value_counts()
+                min_class_size = class_counts.min()
+                cv_folds = min(5, min_class_size) if min_class_size >= 2 else 3
+            else:
+                cv_folds = min(5, len(X_train_clean) // 3)
+            
+            cv_folds = max(2, cv_folds)  # Ensure at least 2 folds
+            
+            search = RandomizedSearchCV(
+                model_class(random_state=42),
+                param_grid,
+                n_iter=min(20, len(X_train_clean) // cv_folds),  # Adjust n_iter based on data size
+                cv=cv_folds,
+                scoring=scoring,
+                random_state=42,
+                n_jobs=1,  # Reduced parallelism to avoid issues
+                error_score='raise'
+            )
+            
+            search.fit(X_train_clean, y_train_clean)
+            
+        except Exception as e:
+            print(f"⚠️ RandomizedSearchCV failed: {e}. Using simple model training...")
+            # Fallback to simple training
+            model = model_class(random_state=42)
+            X_train_clean, y_train_clean = self.error_handler.auto_fix_dataset(
+                pd.DataFrame(X_train) if not isinstance(X_train, pd.DataFrame) else X_train,
+                pd.Series(y_train) if not isinstance(y_train, pd.Series) else y_train
+            )
+            X_train_clean = X_train_clean.values if hasattr(X_train_clean, 'values') else X_train_clean
+            y_train_clean = y_train_clean.values if hasattr(y_train_clean, 'values') else y_train_clean
+            
+            model.fit(X_train_clean, y_train_clean)
+            cv_scores = self.error_handler.safe_cross_validation(
+                model, pd.DataFrame(X_train_clean), pd.Series(y_train_clean), cv=3
+            )
+            return model, {}, cv_scores
         
         return search.best_estimator_, search.best_params_, search.cv_results_['mean_test_score']
     
