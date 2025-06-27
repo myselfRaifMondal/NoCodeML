@@ -17,7 +17,7 @@ def check_dependencies():
     required_packages = [
         'streamlit',
         'pandas',
-        'scikit-learn',
+        'sklearn',
         'plotly'
     ]
     
@@ -138,6 +138,18 @@ def main():
         sys.exit(1)
     
     # Check dependencies
+    missing = check_dependencies()
+    if missing:
+        print(f"⚠️ Missing dependencies: {', '.join(missing)}")
+        response = input("Would you like to install them now? (y/n): ").strip().lower()
+        if response in ['y', 'yes']:
+            if not install_dependencies():
+                print("❌ Failed to install dependencies. Please install manually:")
+                print("pip install -r requirements.txt")
+                sys.exit(1)
+        else:
+            print("❌ Dependencies required. Please install them and try again.")
+            sys.exit(1)
     
     # Start backend (optional)
     backend_process = start_backend()
