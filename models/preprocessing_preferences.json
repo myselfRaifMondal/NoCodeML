@@ -1,10 +1,10 @@
 {
   "adaptive_thresholds": {
-    "missing_threshold": 0.8551696790581571,
-    "correlation_threshold": 1.6248223902104983,
-    "variance_threshold": 0.017103393581163143,
-    "outlier_threshold": 5.131018074348943,
-    "cardinality_threshold": 0.8551696790581571
+    "missing_threshold": 0.8956833426035372,
+    "correlation_threshold": 1.7017983509467207,
+    "variance_threshold": 0.01791366685207075,
+    "outlier_threshold": 5.374100055621224,
+    "cardinality_threshold": 0.8956833426035372
   },
   "strategy_performance": {
     "imputation_strategies": {
@@ -55,6 +55,15 @@
       "One-hot encoded column 'Cabin' (6 categories)": [
         0.0,
         0.0
+      ],
+      "One-hot encoded column 'location' (3 categories)": [
+        1.0
+      ],
+      "One-hot encoded column 'Day_of_Week' (7 categories)": [
+        0.0
+      ],
+      "Label encoded binary column 'Holiday'": [
+        0.0
       ]
     },
     "scaling_strategies": {},
@@ -79,5 +88,5 @@
       ]
     }
   },
-  "last_updated": "2025-06-23T11:27:18.501271"
+  "last_updated": "2025-06-27T18:06:45.062394"
 }
