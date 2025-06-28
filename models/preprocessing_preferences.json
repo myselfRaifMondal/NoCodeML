@@ -1,10 +1,10 @@
 {
   "adaptive_thresholds": {
-    "missing_threshold": 0.8956833426035372,
-    "correlation_threshold": 1.7017983509467207,
-    "variance_threshold": 0.01791366685207075,
-    "outlier_threshold": 5.374100055621224,
-    "cardinality_threshold": 0.8956833426035372
+    "missing_threshold": 0.9874908852203998,
+    "correlation_threshold": 1.8762326819187598,
+    "variance_threshold": 0.019749817704408,
+    "outlier_threshold": 5.9249453113224,
+    "cardinality_threshold": 0.9874908852203998
   },
   "strategy_performance": {
     "imputation_strategies": {
@@ -60,9 +60,17 @@
         1.0
       ],
       "One-hot encoded column 'Day_of_Week' (7 categories)": [
+        0.0,
         0.0
       ],
       "Label encoded binary column 'Holiday'": [
+        0.0,
+        0.0
+      ],
+      "One-hot encoded column 'Department' (3 categories)": [
+        0.0
+      ],
+      "Label encoded binary column 'Promoted'": [
         0.0
       ]
     },
@@ -88,5 +96,5 @@
       ]
     }
   },
-  "last_updated": "2025-06-27T18:06:45.062394"
+  "last_updated": "2025-06-27T20:58:04.568008"
 }
